@@ -45,12 +45,8 @@ func terminalInputAvailable() bool {
 }
 
 func pickTransferFiles(initial []string) (browserResult, error) {
-	screen, err := tcell.NewScreen()
+	screen, err := newBrowserScreen()
 	if err != nil {
-		return browserResult{}, err
-	}
-	if err = screen.Init(); err != nil {
-		screen.Fini()
 		return browserResult{}, err
 	}
 	t := &pickerTerminal{screen: screen}

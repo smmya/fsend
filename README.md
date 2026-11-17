@@ -22,7 +22,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ```sh
 curl -fsSL --proto '=https' https://raw.githubusercontent.com/smmya/fsend/main/install.sh -o install-fsend.sh
-FSEND_VERSION=v1.4.2 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
+FSEND_VERSION=v1.4.3 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
 ```
 
 需要 `curl`、`tar` 及 `sha256sum` 或 `shasum`。支持 Linux amd64 / arm64 / armv7，macOS amd64 / arm64。
@@ -41,7 +41,7 @@ FSEND_VERSION=v1.4.2 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
 
 ```powershell
 $script = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/smmya/fsend/main/install.ps1').Content
-& ([scriptblock]::Create($script)) -Version v1.4.2 -InstallDir 'D:\Tools\fsend' -NoPath
+& ([scriptblock]::Create($script)) -Version v1.4.3 -InstallDir 'D:\Tools\fsend' -NoPath
 ```
 
 支持 Windows amd64 / arm64。
@@ -232,6 +232,7 @@ fsend receive -o ./received --max-bytes 536870912000 --max-entries 200000
 - 仍拒绝设备名、控制字符、`..` 路径段以及包含 `:<>"|?*` 的路径段。添加目录时会递归检查文件名，尽早提示不支持的名称。
 - 当前版本不恢复时间戳、所有者、ACL、扩展属性及目录权限；普通文件仅保留基本权限位。
 - 连接失败：检查 IP、监听端口、防火墙、端口转发，以及监听方是否已超时退出。
+- 界面中文显示为 `?`：升级到 v1.4.3 或更新版本，浏览器会兼容服务器常见的 `C` / `POSIX` / ASCII locale，无需修改系统语言设置。SSH 客户端仍需使用 UTF-8 编码和支持中文的字体。旧版可临时执行 `env LC_ALL=C.UTF-8 fsend`。
 - 密钥校验失败：核对完整密钥，重新启动监听方生成新密钥。未经认证的探测连接会被拒绝，监听方会继续等待到 `--wait` 超时。
 - 握手最多 30 秒；传输期间单帧读写最多等待 10 分钟。交互停顿过久也会断开，重新启动传输即可。
 - 失败时返回非零退出码。串行模式已验证的文件保留；失败文件删除。打包模式校验失败时会清理本次创建的文件。新建的空目录可能保留；强制终止、断电或进程崩溃可能留下未完成文件。

@@ -1,5 +1,5 @@
 fsend 原理与实现思路
-审查基线：WorkBuddy fastsend d07ce11；整理版本：v1.4.2；日期：2026-11-17。
+审查基线：WorkBuddy fastsend d07ce11；整理版本：v1.4.3；更新日期：2026-11-18。
 
 1. 角色与连接
 默认由接收方监听、发送方连接；-R 反转 TCP 建立方向。
@@ -97,3 +97,10 @@ Q/Ctrl+C 退出整个浏览器。左箭头与 Backspace 的上级导航继续保
 
 v1.4.2 构建补丁
 go.mod 保留最低工具链要求；Actions 显式选取 1.26.x 并检查最新补丁，不再把 go.mod 的 1.26.0 最低版本当作精确构建器版本。
+
+v1.4.3 终端字符集
+tcell 在 Unix 按 LC_ALL、LC_CTYPE、LANG 的优先级选择编码，C/POSIX 会选 US-ASCII，使中文标签被替换为问号。
+初始化浏览器时对 ASCII 类 locale 暂时使用 LC_ALL=C.UTF-8，让 tcell 建立 UTF-8 编解码器，初始化完成或失败后立即恢复变量原值及未设置状态。
+不修改系统 locale、shell 配置、用户持久环境或 Windows 控制台代码页。正常 UTF-8 和显式非 ASCII 的旧编码设置保持原样；Windows 使用原生 Unicode 路径。
+源文件名、传输内容与线协议不变。真实 POSIX 终端测试新增 C、POSIX、不同 locale 优先级及空 locale，检查实际输出中的中文标签与中文文件名，而不仅检查文件内容。
+终端客户端需要支持 UTF-8 和中文字体；进程内编码初始化不能替客户端安装字体。

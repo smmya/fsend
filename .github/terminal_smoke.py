@@ -16,7 +16,7 @@ import termios
 import time
 
 
-def terminal_run(binary, cwd, args, keys):
+def terminal_run(binary, cwd, args, keys, locale=None):
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 28, 110, 0, 0))
     pid = os.fork()
@@ -30,6 +30,10 @@ def terminal_run(binary, cwd, args, keys):
             os.close(slave)
         os.chdir(cwd)
         os.environ['TERM'] = 'xterm-256color'
+        if locale is not None:
+            for name in ('LC_ALL', 'LC_CTYPE', 'LANG'):
+                os.environ.pop(name, None)
+            os.environ.update(locale)
         os.execv(binary, [binary, *args])
     os.close(slave)
     transcript = bytearray()
@@ -62,6 +66,8 @@ def terminal_run(binary, cwd, args, keys):
                     transcript.extend(data)
                 assert os.waitstatus_to_exitcode(status) == 0, 'terminal process failed'
                 assert sent, 'file browser did not render its directory listing'
+                assert '文件浏览器'.encode('utf-8') in transcript, 'Chinese UI was replaced or misencoded'
+                assert '资料'.encode('utf-8') in transcript, 'Unicode filenames were replaced or misencoded'
                 assert b'\x1b[?1049l' in transcript, 'terminal alternate screen was not restored'
                 return bytes(transcript)
         raise AssertionError('terminal process timed out')
@@ -79,6 +85,17 @@ with tempfile.TemporaryDirectory(prefix='fsend-terminal-') as directory:
     (source / '资料').mkdir(parents=True)
     (source / '资料' / 'alpha.txt').write_bytes(b'alpha')
     (source / 'beta.txt').write_bytes(b'beta')
+    locales = [
+        ('C overrides UTF-8', {'LC_ALL': 'C', 'LC_CTYPE': 'en_US.UTF-8', 'LANG': 'en_US.UTF-8'}),
+        ('POSIX', {'LC_ALL': 'POSIX'}),
+        ('LC_CTYPE C', {'LC_CTYPE': 'C', 'LANG': 'en_US.UTF-8'}),
+        ('LANG C', {'LANG': 'C'}),
+        ('UTF-8', {'LC_ALL': 'C.UTF-8'}),
+        ('unset locale', {}),
+    ]
+    for label, locale in locales:
+        terminal_run(binary, source, ['send', '--browse'], b'q', locale)
+        print(f'Locale rendering passed: {label}, Chinese UI and Unicode paths remained UTF-8.')
     receiver = subprocess.Popen([binary, 'receive', '-o', str(target), '-b', '127.0.0.1', '--ip', '127.0.0.1', '-p', '0', '--wait', '30'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
     lines = queue.Queue()
     def read_lines():
@@ -92,7 +109,7 @@ with tempfile.TemporaryDirectory(prefix='fsend-terminal-') as directory:
             if match:
                 key = match[0]
         # The first row is '..', then the directory, then the regular file.
-        terminal_run(binary, source, ['send', '--browse', key], b'\x1b[By\x1b[B \x13')
+        terminal_run(binary, source, ['send', '--browse', key], b'\x1b[By\x1b[B \x13', {'LC_ALL': 'C'})
         assert receiver.wait(timeout=10) == 0, 'receiver failed'
         assert (target / '资料' / 'alpha.txt').read_bytes() == b'alpha'
         assert (target / 'beta.txt').read_bytes() == b'beta'
