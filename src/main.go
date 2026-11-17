@@ -9,7 +9,7 @@ import (
 )
 
 // 版本号（version 子命令输出）
-var appVersion = "1.3.0"
+var appVersion = "1.4.0"
 
 func main() {
 	// 顶层 recover：任何 panic 都转为错误输出，绝不把栈信息抛给用户
@@ -18,6 +18,7 @@ func main() {
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sig
+		closeActivePicker()
 		fmt.Fprintln(os.Stderr, "[fastsend] 已中断")
 		os.Exit(1)
 	}()
@@ -75,6 +76,8 @@ func printUsage() {
   fsend                         交互向导（发送/接收、选择连接方向）
   fsend receive [-o 存储目录] [-p 监听端口] [-b 绑定地址] [--ip 对外IP] [--wait 秒]
   fsend send [混合密钥] [--mode tar|serial]
+  fsend send --browse            打开多选文件浏览器
+  fsend send --manual            手动输入路径
   fsend send --path 路径 [--path 其他路径] [--mode tar|serial] 混合密钥
   fsend version
 

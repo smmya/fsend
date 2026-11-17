@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -32,6 +33,13 @@ type fileItem struct {
 
 // scanEntry 预扫描一个入口：Lstat 递归，不跟随软链
 func scanEntry(p string) (*queueEntry, error) {
+	return scanEntryContext(context.Background(), p)
+}
+
+func scanEntryContext(ctx context.Context, p string) (*queueEntry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	fi, err := os.Lstat(p)
 	if err != nil {
 		return nil, err
@@ -49,7 +57,7 @@ func scanEntry(p string) (*queueEntry, error) {
 	}
 	switch {
 	case fi.IsDir():
-		if err := walkSum(clean, e); err != nil {
+		if err := walkSumContext(ctx, clean, e); err != nil {
 			return nil, err
 		}
 	case fi.Mode()&os.ModeSymlink != 0:
@@ -61,12 +69,18 @@ func scanEntry(p string) (*queueEntry, error) {
 	return e, nil
 }
 
-func walkSum(dir string, e *queueEntry) error {
+func walkSumContext(ctx context.Context, dir string, e *queueEntry) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	des, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
 	for _, de := range des {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		full := filepath.Join(dir, de.Name())
 		rel, err := filepath.Rel(filepath.Dir(e.Path), full)
 		if err != nil {
@@ -81,7 +95,7 @@ func walkSum(dir string, e *queueEntry) error {
 		}
 		switch {
 		case fi.IsDir():
-			if err := walkSum(full, e); err != nil {
+			if err := walkSumContext(ctx, full, e); err != nil {
 				return err
 			}
 		case !fi.Mode().IsRegular():

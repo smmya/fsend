@@ -4,13 +4,30 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 func newInputScanner(r io.Reader) *bufio.Scanner {
+	// A canonical-mode terminal may receive several pasted lines at once.
+	// Do not let the line menu steal keystrokes intended for the raw-mode picker.
+	if f, ok := r.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		r = oneByteReader{r}
+	}
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 64*1024)
 	return sc
+}
+
+type oneByteReader struct{ io.Reader }
+
+func (r oneByteReader) Read(p []byte) (int, error) {
+	if len(p) > 1 {
+		p = p[:1]
+	}
+	return r.Reader.Read(p)
 }
 
 // Pass this same scanner into the selected command: a second scanner would
@@ -60,7 +77,7 @@ func interactiveArgs(sc *bufio.Scanner) ([]string, error) {
 		args = append(args, "--wait", "600")
 	}
 	if sender {
-		fmt.Println("连接后逐行添加路径，空行开始发送；使用推荐的打包模式。")
+		fmt.Println("终端中可多选文件/目录；选择后再连接。M 可切换手动输入；默认打包模式。")
 	}
 	return args, nil
 }

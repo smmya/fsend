@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -9,7 +10,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -50,6 +50,8 @@ func runSendWithInput(args []string, sc *bufio.Scanner) int {
 	fs.SetOutput(os.Stderr)
 	var paths pathFlags
 	fs.Var(&paths, "path", "发送文件或目录路径，可重复；跳过路径交互")
+	browse := fs.Bool("browse", false, "打开多选文件浏览器（需要交互终端）")
+	manual := fs.Bool("manual", false, "手动输入路径，不打开文件浏览器")
 	reverse := fs.Bool("R", false, "反向模式: 本端监听并给出混合密钥（由接收端拨号连入）")
 	fs.BoolVar(reverse, "reverse", false, "反向模式（同 -R）")
 	port := fs.Int("p", 8977, "监听端口（仅反向模式）")
@@ -68,6 +70,10 @@ func runSendWithInput(args []string, sc *bufio.Scanner) int {
 	if len(paths) > 0 && mode == "" {
 		mode = "tar"
 	}
+	if *browse && (*manual || len(paths) > 0) {
+		errf("--browse 不能和 --manual / --path 一起使用")
+		return 2
+	}
 	if *waitSec < 0 || *waitSec > 86400 || *port < 0 || *port > 65535 {
 		errf("--wait 必须为 0..86400，端口必须为 0..65535")
 		return 2
@@ -84,14 +90,39 @@ func runSendWithInput(args []string, sc *bufio.Scanner) int {
 
 	var queue []*queueEntry
 	if len(paths) > 0 {
-		for _, p := range paths {
-			e, err := scanEntry(p)
-			if err != nil {
-				errf("扫描失败 %q: %v", p, err)
-				return 1
-			}
-			queue = append(queue, e)
+		var err error
+		queue, err = buildSelectedQueue(context.Background(), paths)
+		if err != nil {
+			errf("%v", err)
+			return 1
 		}
+	} else if !*manual && (*browse || terminalInputAvailable()) {
+		if !terminalInputAvailable() {
+			errf("文件浏览器需要交互终端；请使用 --manual 或 --path")
+			return 2
+		}
+		picked, err := pickTransferFiles(nil)
+		if errors.Is(err, errBrowserCancelled) {
+			logf("已取消发送")
+			return 0
+		}
+		if err != nil {
+			errf("无法启动文件浏览器: %v；改用手动输入", err)
+			picked.manual = true
+		}
+		if picked.manual {
+			var rc int
+			queue, rc = inputQueueWithSelection(sc, picked.paths)
+			if rc != 0 {
+				return rc
+			}
+		} else {
+			queue = picked.queue
+		}
+		if mode == "" {
+			mode = "tar"
+		}
+		logf("已选择 %d 项，准备建立连接", len(queue))
 	}
 
 	// 1. 建立连接（正向：拨号；反向：监听等待）
@@ -271,52 +302,54 @@ func runSendWithInput(args []string, sc *bufio.Scanner) int {
 
 // inputQueue 交互式收集传输队列
 func inputQueue(sc *bufio.Scanner) ([]*queueEntry, int) {
-	var queue []*queueEntry
-	seen := make(map[string]bool)
+	return inputQueueWithSelection(sc, nil)
+}
+
+func inputQueueWithSelection(sc *bufio.Scanner, initial []string) ([]*queueEntry, int) {
+	var selection pathSelection
+	for _, p := range initial {
+		if _, err := selection.add(p); err != nil {
+			errf("%v", err)
+			return nil, 1
+		}
+	}
+	finish := func() ([]*queueEntry, int) {
+		if len(selection.items) == 0 {
+			errf("队列为空，退出")
+			return nil, 1
+		}
+		queue, err := buildSelectedQueue(context.Background(), selection.paths())
+		if err != nil {
+			errf("%v", err)
+			return nil, 1
+		}
+		return queue, 0
+	}
 
 	for {
 		line, err := readPathLine(sc, "添加传输任务路径（直接回车结束）: ")
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				if len(queue) == 0 {
-					errf("队列为空，退出")
-					return nil, 1
-				}
-				return queue, 0
+				return finish()
 			}
 			errf("读取输入失败: %v", err)
 			return nil, 1
 		}
 		if line == "" {
-			if len(queue) == 0 {
+			if len(selection.items) == 0 {
 				continue
 			}
-			return queue, 0
+			return finish()
 		}
-		abs, aerr := filepath.Abs(line)
-		if aerr != nil {
-			abs = filepath.Clean(line)
-		}
-		if seen[abs] {
-			logf("队列中已存在: %s", line)
+		changed, err := selection.add(line)
+		if err != nil {
+			errf("添加失败 %q: %v", line, err)
 			continue
 		}
-		if _, serr := os.Lstat(line); serr != nil {
-			logf("路径不存在: %s", line)
+		if !changed {
+			logf("已在队列或已包含于父目录: %q", line)
 			continue
 		}
-		e, serr := scanEntry(line)
-		if serr != nil {
-			errf("扫描失败: %s: %v", line, serr)
-			return nil, 1
-		}
-		seen[abs] = true
-		queue = append(queue, e)
-
-		if e.IsDir {
-			fmt.Printf("  + %-7s  [目录] %s / %d 个文件\n", e.Name, humanSize(e.Bytes), e.Files)
-		} else {
-			fmt.Printf("  + %-7s  [文件] %s\n", e.Name, humanSize(e.Bytes))
-		}
+		logf("已添加 %q；当前 %d 项（父子已去重）", line, len(selection.items))
 	}
 }

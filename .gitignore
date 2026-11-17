@@ -19,3 +19,5 @@
 /dist/
 /.gitea-project-sync.json
 .env*
+__pycache__/
+*.pyc

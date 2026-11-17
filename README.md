@@ -22,7 +22,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ```sh
 curl -fsSL --proto '=https' https://raw.githubusercontent.com/smmya/fsend/main/install.sh -o install-fsend.sh
-FSEND_VERSION=v1.3.0 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
+FSEND_VERSION=v1.4.0 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
 ```
 
 需要 `curl`、`tar` 及 `sha256sum` 或 `shasum`。支持 Linux amd64 / arm64 / armv7，macOS amd64 / arm64。
@@ -41,7 +41,7 @@ FSEND_VERSION=v1.3.0 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
 
 ```powershell
 $script = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/smmya/fsend/main/install.ps1').Content
-& ([scriptblock]::Create($script)) -Version v1.3.0 -InstallDir 'D:\Tools\fsend' -NoPath
+& ([scriptblock]::Create($script)) -Version v1.4.0 -InstallDir 'D:\Tools\fsend' -NoPath
 ```
 
 支持 Windows amd64 / arm64。
@@ -74,12 +74,45 @@ fsend
 
 1. 接收方选择 **2 接收文件**，连接方式直接回车，选择保存目录（回车使用默认目录），IP/域名也可回车自动检测。
 2. 接收方将打印的连接码发给发送方。
-3. 发送方选择 **1 发送文件**，连接方式直接回车，粘贴连接码。
-4. 发送方逐行输入要发送的文件或目录路径，最后输入空行开始发送。
+3. 发送方选择 **1 发送文件**，连接方式直接回车，进入文件浏览器。
+4. 用空格勾选文件或整个目录，可进入其他目录继续添加；按 **F10 / Ctrl+S** 确认。
+5. 文件检查通过后，发送方粘贴接收方的连接码，开始传输。
 
-向导默认使用打包模式，不再额外询问模式；生成连接码后等待 10 分钟。路径带空格可以直接输入，也支持文件管理器拖入的成对引号路径。
+向导默认使用打包模式，不再额外询问模式；生成连接码后等待 10 分钟。浏览和检查文件期间尚未建立连接，反向发送也在选择完成后才开始监听。
 
 如果接收方不能开放端口，让发送方选择“生成连接码”，接收方选择“输入连接码”即可完成反向连接。公网监听方仍需要开放端口并配置端口转发；IP/域名应填对方可访问的地址。
+
+### 文件浏览器操作
+
+| 按键 | 操作 |
+| --- | --- |
+| ↑ / ↓、PageUp / PageDown、Home / End | 移动与翻页 |
+| Enter / → | 进入当前目录 |
+| ← / Backspace | 返回上级目录 |
+| 空格 | 勾选或取消文件、整个目录 |
+| A | 选择或取消当前目录 |
+| Tab | 切换目录列表与待发送队列 |
+| 空格 / Delete（队列中） | 移除队列项，不会删除磁盘文件 |
+| G | 输入目录跳转，支持 `~`，Windows 可输入 `D:\` 等盘符 |
+| H / R | 用户主目录 / 刷新当前目录 |
+| F10 / Ctrl+S | 确认队列并检查文件，随后继续连接流程 |
+| M | 保留当前选择，改为手动输入路径 |
+| Esc / Q | 取消发送；输入跳转路径时 Esc 只取消输入 |
+
+`[x]` 表示明确选中，`[-]` 表示已包含在所选父目录内，`[!]` 表示软链接或特殊文件，不参与发送。
+
+选择会跨目录保留。选择父目录时，已选中的内部文件/子目录自动合并；选中父目录后再勾选内部文件，不会重复发送。若只想发送其中一部分，请先从队列移除父目录，再单独选择。手动输入和 `--path` 同样执行父子去重。
+
+浏览器只读取当前目录；确认队列后才递归检查所选内容。取消、完成或普通中断都会恢复终端。无交互终端、输出重定向或 `TERM=dumb` 时自动使用原文本流程；浏览器初始化失败时也会提示改用文本输入。
+
+也可以直接打开浏览器或强制使用原手动流程：
+
+```sh
+fsend send --browse
+fsend send --manual --mode tar
+```
+
+文件浏览器需要输入、输出均连接交互终端。终端软件占用 F10 时可用 Ctrl+S。Windows、Linux、macOS 的发布程序已包含所需界面模块，无需另外安装文件浏览器。
 
 ## 命令行兜底：接收方先启动
 
@@ -100,7 +133,7 @@ fs://192.168.1.10:8977#XXXX-XXXX-XXXX-XXXX-XXXX-XXXX
 **2. 发送方启动：**
 
 ```sh
-fsend send --mode tar
+fsend send --manual --mode tar
 ```
 
 按提示粘贴混合密钥，再逐行输入要发送的文件或目录路径。路径带空格时可直接输入，也支持成对引号。输入完后再按一次回车开始传输。
@@ -114,7 +147,7 @@ fsend send --mode tar
 
 Windows 输入示例：`C:\Users\Alice\Pictures\photo.jpg`。
 
-如果希望每个文件分别确认，使用 `fsend send --mode serial`。直接使用 `send` 子命令且省略 `--mode`、`--path` 时，程序会让你选择模式。两个模式均支持空文件和空目录。请双方同时升级到 v1.3.0 或更新的兼容版本，以获得本次文件名修复。
+如果希望每个文件分别确认，使用 `fsend send --manual --mode serial`。文件浏览器默认打包模式，也可以用 `fsend send --browse --mode serial` 指定逐文件模式。原文本流程中省略 `--mode` 时仍会询问模式。两个模式均支持空文件和空目录；接收方至少使用 v1.3.0 可获得文件名兼容修复，建议双方使用最新版。
 
 **3. 等待两端显示完成。** 接收方在 `received` 目录中查看文件；遇到同名文件会自动添加序号，例如 `photo.1.jpg`。已有目录会合并，已有文件不会被覆盖。
 

@@ -32,6 +32,10 @@ jobs:
           go build -trimpath -o "$RUNNER_TEMP/fsend.exe" ./src
           "$RUNNER_TEMP/fsend.exe" version
           "$RUNNER_TEMP/fsend.exe" --help
+      - name: Verify real terminal file selection and transfer
+        if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
+        shell: bash
+        run: python3 .github/terminal_smoke.py "$RUNNER_TEMP/fsend.exe"
 
   release:
     needs: check
@@ -94,12 +98,12 @@ jobs:
             stage=$(mktemp -d)
             exe=fsend; [[ "$os" != windows ]] || exe=fsend.exe
             GOOS=$os GOARCH=$arch GOARM=7 go build -trimpath -ldflags="-s -w -X main.appVersion=${TAG#v}" -o "$stage/$exe" ./src
-            cp README.md DESIGN.txt AUDIT.txt "$stage/"
+            cp README.md DESIGN.txt AUDIT.txt THIRD_PARTY_NOTICES.txt "$stage/"
             archive="$GITHUB_WORKSPACE/dist/fsend_${TAG#v}_${os}_${label}"
             if [[ "$os" == windows ]]; then
-              (cd "$stage" && zip -q "$archive.zip" "$exe" README.md DESIGN.txt AUDIT.txt)
+              (cd "$stage" && zip -q "$archive.zip" "$exe" README.md DESIGN.txt AUDIT.txt THIRD_PARTY_NOTICES.txt)
             else
-              tar -czf "$archive.tar.gz" -C "$stage" "$exe" README.md DESIGN.txt AUDIT.txt
+              tar -czf "$archive.tar.gz" -C "$stage" "$exe" README.md DESIGN.txt AUDIT.txt THIRD_PARTY_NOTICES.txt
             fi
             rm -rf "$stage"
           done
