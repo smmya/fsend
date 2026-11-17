@@ -1,0 +1,4 @@
+# 统一 LF：本项目面向 Linux 部署，脚本带 CRLF 会直接报 bad interpreter
+* text=auto eol=lf
+*.sh text eol=lf
+*.go text eol=lf

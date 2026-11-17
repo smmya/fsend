@@ -1,0 +1,123 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+      - shell: bash
+        run: |
+          go build -trimpath -o "$RUNNER_TEMP/fsend.exe" .
+          "$RUNNER_TEMP/fsend.exe" version
+          "$RUNNER_TEMP/fsend.exe" --help
+
+  release:
+    needs: check
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: fsend-release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Select immutable version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          COMMIT: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$REF_TYPE" == tag ]]; then
+            tag="$REF_NAME"
+          else
+            tag="v$(go run . version | awk '{print $2}')"
+          fi
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; nothing will be replaced."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            if ref=$(gh api "repos/$GH_REPO/git/ref/tags/$tag" 2>/dev/null); then
+              tag_commit=$(printf '%s' "$ref" | jq -r '.object.sha')
+              [[ "$tag_commit" == "$COMMIT" ]] || { echo "Tag belongs to another commit" >&2; exit 1; }
+            fi
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Build archives and checksums
+        if: steps.version.outputs.publish == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          CGO_ENABLED: '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 linux/arm darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            os=${target%/*}; arch=${target#*/}; label=$arch
+            [[ "$arch" != arm ]] || label=armv7
+            stage=$(mktemp -d)
+            exe=fsend; [[ "$os" != windows ]] || exe=fsend.exe
+            GOOS=$os GOARCH=$arch GOARM=7 go build -trimpath -ldflags="-s -w -X main.appVersion=${TAG#v}" -o "$stage/$exe" .
+            cp README.md DESIGN.txt AUDIT.txt "$stage/"
+            archive="$GITHUB_WORKSPACE/dist/fsend_${TAG#v}_${os}_${label}"
+            if [[ "$os" == windows ]]; then
+              (cd "$stage" && zip -q "$archive.zip" "$exe" README.md DESIGN.txt AUDIT.txt)
+            else
+              tar -czf "$archive.tar.gz" -C "$stage" "$exe" README.md DESIGN.txt AUDIT.txt
+            fi
+            rm -rf "$stage"
+          done
+          cp install.sh install.ps1 dist/
+          (cd dist && sha256sum *.tar.gz *.zip install.sh install.ps1 > SHA256SUMS)
+      - name: Publish release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          gh release create "$TAG" dist/* --target "$COMMIT" --title "fsend $TAG" --notes-file .github/RELEASE_NOTES.md
+      - name: Verify published Linux installer
+        if: steps.version.outputs.publish == 'true'
+        env:
+          FSEND_VERSION: ${{ steps.version.outputs.tag }}
+        run: |
+          INSTALL_DIR="$RUNNER_TEMP/fsend-installed" sh ./install.sh
+          "$RUNNER_TEMP/fsend-installed/fsend" version

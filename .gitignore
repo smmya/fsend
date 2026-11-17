@@ -1,1 +1,18 @@
-# Local data and WorkBuddy originals are excluded; see the source import commit.
+# WorkBuddy originals and local data must never enter the published tree.
+/crypto_test.go
+/util_test.go
+/wire_test.go
+/scripts/selftest.sh
+/WORKPLAN.md
+/demo-*/
+*.log
+*.err
+*.out
+*.exe
+/fsend
+/fsend-linux
+*.tar.gz
+*.zip
+/dist/
+/.gitea-project-sync.json
+.env*
