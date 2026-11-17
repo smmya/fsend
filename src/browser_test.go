@@ -285,7 +285,7 @@ func TestBrowserJumpManualAndPasteSafety(t *testing.T) {
 func TestBrowserCancelAndSmallWindow(t *testing.T) {
 	root, _, _, _ := selectionFixture(t)
 	h := startBrowserTest(t, root)
-	h.key(tcell.KeyEsc, 0)
+	h.key(tcell.KeyRune, 'q')
 	if result := h.result(t); !errors.Is(result.err, errBrowserCancelled) {
 		t.Fatal("cancel failed", result.err)
 	}
@@ -298,5 +298,51 @@ func TestBrowserCancelAndSmallWindow(t *testing.T) {
 	for _, size := range [][2]int{{110, 26}, {40, 12}, {20, 4}, {80, 24}} {
 		s.SetSize(size[0], size[1])
 		b.draw(s)
+	}
+}
+
+func TestBrowserEscNavigationAndYSelection(t *testing.T) {
+	root, _, child, _ := selectionFixture(t)
+	h := startBrowserTest(t, root)
+	enterA := func() {
+		h.key(tcell.KeyHome, 0)
+		h.key(tcell.KeyDown, 0)
+		h.key(tcell.KeyEnter, 0)
+		h.wait(t, func(frame string) bool {
+			return strings.Contains(frame, "alpha.txt") && strings.Contains(frame, "空格勾选，Enter")
+		})
+	}
+	enterA()
+	h.key(tcell.KeyEnd, 0)
+	h.key(tcell.KeyRune, 'Y')
+	h.wait(t, func(frame string) bool { return strings.Contains(frame, "已选 1 项") })
+	h.key(tcell.KeyRune, 'y')
+	h.wait(t, func(frame string) bool { return strings.Contains(frame, "已选 0 项") })
+	h.key(tcell.KeyRune, ' ')
+	h.wait(t, func(frame string) bool { return strings.Contains(frame, "已选 1 项") })
+	h.key(tcell.KeyEsc, 0)
+	h.wait(t, func(frame string) bool {
+		return strings.Contains(frame, `"A"`) && strings.Contains(frame, `"B"`) && strings.Contains(frame, "空格勾选，Enter")
+	})
+	enterA()
+	h.key(tcell.KeyLeft, 0)
+	h.wait(t, func(frame string) bool {
+		return strings.Contains(frame, `"B"`) && strings.Contains(frame, "空格勾选，Enter")
+	})
+	h.key(tcell.KeyTab, 0)
+	h.wait(t, func(frame string) bool { return strings.Contains(frame, "待发送队列") })
+	h.key(tcell.KeyEsc, 0)
+	h.wait(t, func(frame string) bool { return strings.Contains(frame, "已返回目录浏览") })
+	h.key(tcell.KeyRune, 'g')
+	h.wait(t, func(frame string) bool { return strings.Contains(frame, "跳转目录:") })
+	h.key(tcell.KeyRune, 'y')
+	h.key(tcell.KeyEsc, 0)
+	h.wait(t, func(frame string) bool {
+		return strings.Contains(frame, "G 跳转路径") && strings.Contains(frame, "已选 1 项")
+	})
+	h.key(tcell.KeyCtrlS, 0)
+	result := h.result(t)
+	if result.err != nil || len(result.result.paths) != 1 || result.result.paths[0] != child {
+		t.Fatal("Esc changed the queue or Y confirmed instead of selecting", result)
 	}
 }

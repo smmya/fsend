@@ -9,7 +9,7 @@ import (
 )
 
 // 版本号（version 子命令输出）
-var appVersion = "1.4.0"
+var appVersion = "1.4.1"
 
 func main() {
 	// 顶层 recover：任何 panic 都转为错误输出，绝不把栈信息抛给用户

@@ -68,11 +68,12 @@ type browserEntry struct {
 	dir, disabled, parent bool
 }
 type browserUpdate struct {
-	dir     string
-	entries []browserEntry
-	queue   []*queueEntry
-	err     error
-	confirm bool
+	generation uint64
+	dir        string
+	entries    []browserEntry
+	queue      []*queueEntry
+	err        error
+	confirm    bool
 }
 type fileBrowser struct {
 	dir                               string
@@ -157,17 +158,29 @@ func runFileBrowser(screen tcell.Screen, start string, initial []string) (browse
 		}
 	}
 	updates := make(chan browserUpdate, 1)
-	post := func(update browserUpdate) {
+	post := func(taskCtx context.Context, update browserUpdate) {
 		select {
 		case updates <- update:
 			_ = screen.PostEvent(tcell.NewEventInterrupt(nil))
+		case <-taskCtx.Done():
 		case <-ctx.Done():
 		}
 	}
-	load := func(dir string) {
+	var generation uint64
+	cancelTask := func() {}
+	defer func() { cancelTask() }()
+	startTask := func(work func(context.Context) browserUpdate) {
+		cancelTask()
+		taskCtx, stop := context.WithCancel(ctx)
+		cancelTask = stop
+		generation++
+		current := generation
 		b.busy = true
-		b.status = "正在读取当前目录…（Esc 取消）"
-		go func() {
+		go func() { update := work(taskCtx); update.generation = current; post(taskCtx, update) }()
+	}
+	load := func(dir string) {
+		b.status = "正在读取当前目录…（Esc 返回，Q 退出）"
+		startTask(func(taskCtx context.Context) browserUpdate {
 			abs, err := filepath.Abs(dir)
 			if err == nil {
 				abs, err = filepath.EvalSymlinks(abs)
@@ -176,13 +189,16 @@ func runFileBrowser(screen tcell.Screen, start string, initial []string) (browse
 			if err == nil {
 				entries, err = readBrowserDir(abs)
 			}
-			post(browserUpdate{dir: abs, entries: entries, err: err})
-		}()
+			return browserUpdate{dir: abs, entries: entries, err: err}
+		})
 	}
 	load(start)
 	for {
 		select {
 		case update := <-updates:
+			if update.generation != generation {
+				continue
+			}
 			b.busy = false
 			if update.err != nil {
 				b.status = "操作失败: " + update.err.Error()
@@ -192,7 +208,7 @@ func runFileBrowser(screen tcell.Screen, start string, initial []string) (browse
 				b.dir = update.dir
 				b.entries = update.entries
 				b.cursor = 0
-				b.status = "空格勾选，Enter 进入目录；可跨目录连续添加。"
+				b.status = "空格勾选，Enter 进入目录；Y 也可勾选，可跨目录添加。"
 			}
 		default:
 		}
@@ -246,6 +262,26 @@ func runFileBrowser(screen tcell.Screen, start string, initial []string) (browse
 				continue
 			}
 			if event.Key() == tcell.KeyEsc {
+				if b.busy {
+					cancelTask()
+					generation++
+					b.busy = false
+					b.showQueue = false
+					b.status = "已取消当前操作，返回目录浏览；选择已保留。"
+					if len(b.entries) == 0 {
+						load(b.dir)
+					}
+				} else if b.showQueue {
+					b.showQueue = false
+					b.status = "已返回目录浏览，选择已保留。"
+				} else if parent := filepath.Dir(b.dir); parent != b.dir {
+					load(parent)
+				} else {
+					b.status = "已在根目录；Q / Ctrl+C 退出，选择已保留。"
+				}
+				continue
+			}
+			if event.Key() == tcell.KeyRune && (event.Rune() == 'q' || event.Rune() == 'Q') {
 				return browserResult{}, errBrowserCancelled
 			}
 			if b.busy {
@@ -292,19 +328,18 @@ func runFileBrowser(screen tcell.Screen, start string, initial []string) (browse
 				}
 			case tcell.KeyF10, tcell.KeyCtrlS:
 				if len(b.selection.items) == 0 {
-					b.status = "请先用空格选择文件/目录，或按 A 选择当前目录。"
+					b.status = "请先用空格 / Y 选择文件或目录，或按 A 选择当前目录。"
 					continue
 				}
 				paths := b.selection.paths()
-				b.busy = true
-				b.status = "正在检查所选目录和文件…（Esc 取消）"
-				go func() {
-					queue, err := buildSelectedQueue(ctx, paths)
-					post(browserUpdate{queue: queue, err: err, confirm: true})
-				}()
+				b.status = "正在检查所选目录和文件…（Esc 返回浏览，Q 退出）"
+				startTask(func(taskCtx context.Context) browserUpdate {
+					queue, err := buildSelectedQueue(taskCtx, paths)
+					return browserUpdate{queue: queue, err: err, confirm: true}
+				})
 			case tcell.KeyRune:
 				switch event.Rune() {
-				case ' ':
+				case ' ', 'y', 'Y':
 					if b.showQueue {
 						if count > 0 {
 							b.toggle(b.selection.items[*cursor].path)
@@ -389,7 +424,7 @@ func (b *fileBrowser) draw(screen tcell.Screen) {
 	screen.Clear()
 	screen.HideCursor()
 	if w < 32 || h < 9 {
-		browserText(screen, 0, 0, w, "终端太小，请放大；Esc 取消。", base)
+		browserText(screen, 0, 0, w, "终端太小，请放大；Q 退出。", base)
 		screen.Show()
 		return
 	}
@@ -397,7 +432,7 @@ func (b *fileBrowser) draw(screen tcell.Screen) {
 	browserText(screen, 0, 1, w, "当前位置: "+browserTail(fmt.Sprintf("%q", b.dir), w-10), base)
 	label := "目录内容"
 	if b.showQueue {
-		label = "待发送队列（空格 / Delete 移除，Tab 返回浏览）"
+		label = "待发送队列（空格 / Y / Delete 移除，Esc 返回浏览）"
 	}
 	browserText(screen, 0, 3, w, label, base.Bold(true))
 	count := len(b.entries)
@@ -442,15 +477,15 @@ func (b *fileBrowser) draw(screen tcell.Screen) {
 		browserText(screen, 0, 4+row, w, text, style)
 	}
 	browserText(screen, 0, h-4, w, b.status, base.Foreground(tcell.ColorYellow))
-	browserText(screen, 0, h-3, w, "↑↓ 移动  Enter 进入  ← 上级  空格 勾选  A 当前目录  Tab 队列", base)
+	browserText(screen, 0, h-3, w, "↑↓ 移动  Enter 进入  Esc / ← 上级  空格 / Y 勾选  Tab 队列", base)
 	if b.editing {
 		input := browserTail(string(b.input), w-12)
 		browserText(screen, 0, h-2, w, "跳转目录: "+input, base)
 		screen.ShowCursor(min(w-1, 10+uniseg.StringWidth(input)), h-2)
 		browserText(screen, 0, h-1, w, "Enter 跳转（支持 ~ / Windows 盘符）  Esc 取消输入", base)
 	} else {
-		browserText(screen, 0, h-2, w, "G 跳转目录/盘符  H 用户目录  R 刷新  M 手动输入", base)
-		browserText(screen, 0, h-1, w, "F10 / Ctrl+S 确认选择并检查  Esc / Q 取消发送", base.Bold(true))
+		browserText(screen, 0, h-2, w, "A 当前目录  G 跳转路径  H 用户目录  R 刷新  M 手动输入", base)
+		browserText(screen, 0, h-1, w, "F10 / Ctrl+S 确认并发送  Q / Ctrl+C 取消发送", base.Bold(true))
 	}
 	screen.Show()
 }

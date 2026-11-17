@@ -1,4 +1,4 @@
-Third-party notices for fsend v1.4.0
+Third-party notices for fsend
 
 The following modules are used by the statically built terminal UI.
 Their original license notices follow. fsend itself has no additional license grant.

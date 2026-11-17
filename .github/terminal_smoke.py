@@ -92,7 +92,7 @@ with tempfile.TemporaryDirectory(prefix='fsend-terminal-') as directory:
             if match:
                 key = match[0]
         # The first row is '..', then the directory, then the regular file.
-        terminal_run(binary, source, ['send', '--browse', key], b'\x1b[B \x1b[B \x13')
+        terminal_run(binary, source, ['send', '--browse', key], b'\x1b[By\x1b[B \x13')
         assert receiver.wait(timeout=10) == 0, 'receiver failed'
         assert (target / '资料' / 'alpha.txt').read_bytes() == b'alpha'
         assert (target / 'beta.txt').read_bytes() == b'beta'

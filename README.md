@@ -22,7 +22,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ```sh
 curl -fsSL --proto '=https' https://raw.githubusercontent.com/smmya/fsend/main/install.sh -o install-fsend.sh
-FSEND_VERSION=v1.4.0 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
+FSEND_VERSION=v1.4.1 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
 ```
 
 需要 `curl`、`tar` 及 `sha256sum` 或 `shasum`。支持 Linux amd64 / arm64 / armv7，macOS amd64 / arm64。
@@ -41,7 +41,7 @@ FSEND_VERSION=v1.4.0 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
 
 ```powershell
 $script = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/smmya/fsend/main/install.ps1').Content
-& ([scriptblock]::Create($script)) -Version v1.4.0 -InstallDir 'D:\Tools\fsend' -NoPath
+& ([scriptblock]::Create($script)) -Version v1.4.1 -InstallDir 'D:\Tools\fsend' -NoPath
 ```
 
 支持 Windows amd64 / arm64。
@@ -75,7 +75,7 @@ fsend
 1. 接收方选择 **2 接收文件**，连接方式直接回车，选择保存目录（回车使用默认目录），IP/域名也可回车自动检测。
 2. 接收方将打印的连接码发给发送方。
 3. 发送方选择 **1 发送文件**，连接方式直接回车，进入文件浏览器。
-4. 用空格勾选文件或整个目录，可进入其他目录继续添加；按 **F10 / Ctrl+S** 确认。
+4. 用 **空格 / Y** 勾选文件或整个目录，可进入其他目录继续添加；按 **F10 / Ctrl+S** 确认。
 5. 文件检查通过后，发送方粘贴接收方的连接码，开始传输。
 
 向导默认使用打包模式，不再额外询问模式；生成连接码后等待 10 分钟。浏览和检查文件期间尚未建立连接，反向发送也在选择完成后才开始监听。
@@ -88,16 +88,17 @@ fsend
 | --- | --- |
 | ↑ / ↓、PageUp / PageDown、Home / End | 移动与翻页 |
 | Enter / → | 进入当前目录 |
-| ← / Backspace | 返回上级目录 |
-| 空格 | 勾选或取消文件、整个目录 |
+| Esc / ← / Backspace | 返回上级目录；在根目录时保留在根目录 |
+| 空格 / Y（大小写均可） | 勾选或取消文件、整个目录，不直接发送 |
 | A | 选择或取消当前目录 |
 | Tab | 切换目录列表与待发送队列 |
-| 空格 / Delete（队列中） | 移除队列项，不会删除磁盘文件 |
+| 空格 / Y / Delete（队列中） | 移除队列项，不会删除磁盘文件 |
 | G | 输入目录跳转，支持 `~`，Windows 可输入 `D:\` 等盘符 |
 | H / R | 用户主目录 / 刷新当前目录 |
 | F10 / Ctrl+S | 确认队列并检查文件，随后继续连接流程 |
 | M | 保留当前选择，改为手动输入路径 |
-| Esc / Q | 取消发送；输入跳转路径时 Esc 只取消输入 |
+| Esc（队列 / 跳转输入 / 检查中） | 分别返回目录浏览、取消路径输入、取消当前操作并返回浏览，保留所选项目 |
+| Q / Ctrl+C | 取消整个发送操作并退出浏览器 |
 
 `[x]` 表示明确选中，`[-]` 表示已包含在所选父目录内，`[!]` 表示软链接或特殊文件，不参与发送。
 
