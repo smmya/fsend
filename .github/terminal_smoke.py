@@ -16,6 +16,17 @@ import termios
 import time
 
 
+def terminal_printed_text(transcript):
+    # tcell repositions the cursor after every wide glyph and clears the two
+    # cells with spaces/backspaces before drawing it. Remove those controls,
+    # but keep the original decoded characters: '?' must never become Chinese.
+    text = bytes(transcript).decode('utf-8')
+    text = re.sub(r'\x1b\][^\x07]*(?:\x07|\x1b\\)', '', text)
+    text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text)
+    text = re.sub(r'\x1b[()][0-2A-Z]', '', text)
+    return text.replace('  \b\b', '')
+
+
 def terminal_run(binary, cwd, args, keys, locale=None):
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 28, 110, 0, 0))
@@ -66,8 +77,9 @@ def terminal_run(binary, cwd, args, keys, locale=None):
                     transcript.extend(data)
                 assert os.waitstatus_to_exitcode(status) == 0, 'terminal process failed'
                 assert sent, 'file browser did not render its directory listing'
-                assert '文件浏览器'.encode('utf-8') in transcript, 'Chinese UI was replaced or misencoded'
-                assert '资料'.encode('utf-8') in transcript, 'Unicode filenames were replaced or misencoded'
+                printed = terminal_printed_text(transcript)
+                assert '文件浏览器' in printed, f'Chinese UI was replaced or misencoded: {printed!r}'
+                assert '资料' in printed, f'Unicode filenames were replaced or misencoded: {printed!r}'
                 assert b'\x1b[?1049l' in transcript, 'terminal alternate screen was not restored'
                 return bytes(transcript)
         raise AssertionError('terminal process timed out')
