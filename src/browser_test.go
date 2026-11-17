@@ -16,6 +16,10 @@ import (
 func selectionFixture(t *testing.T) (string, string, string, string) {
 	t.Helper()
 	root := t.TempDir()
+	root, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	a := filepath.Join(root, "A")
 	b := filepath.Join(root, "B")
 	for _, dir := range []string{a, b} {

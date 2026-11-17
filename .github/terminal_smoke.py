@@ -50,6 +50,16 @@ def terminal_run(binary, cwd, args, keys):
             child, status = os.waitpid(pid, os.WNOHANG)
             if child:
                 reaped = True
+                # The process can exit before its final terminal-reset bytes
+                # have been consumed from the pseudo-terminal buffer.
+                while select.select([master], [], [], 0)[0]:
+                    try:
+                        data = os.read(master, 65536)
+                    except OSError:
+                        break
+                    if not data:
+                        break
+                    transcript.extend(data)
                 assert os.waitstatus_to_exitcode(status) == 0, 'terminal process failed'
                 assert sent, 'file browser did not render its directory listing'
                 assert b'\x1b[?1049l' in transcript, 'terminal alternate screen was not restored'
