@@ -2,6 +2,9 @@
 /crypto_test.go
 /util_test.go
 /wire_test.go
+/src/crypto_test.go
+/src/util_test.go
+/src/wire_test.go
 /scripts/selftest.sh
 /WORKPLAN.md
 /demo-*/

@@ -171,14 +171,16 @@ Windows：删除 `%LOCALAPPDATA%\Programs\fsend\fsend.exe`，并在“编辑账�
 
 ## 从源码编译
 
+Go 源码和回归测试统一位于 `src/` 目录，仓库根目录保留使用文档、安装脚本和项目配置。
+
 安装 Go 1.26 或更新版本后：
 
 ```sh
 git clone https://github.com/smmya/fsend.git
 cd fsend
-go build -trimpath -o fsend .
+go build -trimpath -o fsend ./src
 ```
 
-Windows 可改为 `go build -trimpath -o fsend.exe .`。主分支版本号首次发布时，GitHub Actions 会执行跨平台检查，自动创建对应标签并将安装包发布到 Releases。也支持推送 `vX.Y.Z` 标签触发；已有 Release 不会被覆盖。
+Windows 可改为 `go build -trimpath -o fsend.exe ./src`。主分支版本号首次发布时，GitHub Actions 会执行跨平台检查，自动创建对应标签并将安装包发布到 Releases。也支持推送 `vX.Y.Z` 标签触发；已有 Release 不会被覆盖。
 
 开发说明见 [DESIGN.txt](DESIGN.txt)，审查记录见 [AUDIT.txt](AUDIT.txt)。

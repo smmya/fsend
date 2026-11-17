@@ -29,7 +29,7 @@ jobs:
       - run: go test -race -count=1 ./...
       - shell: bash
         run: |
-          go build -trimpath -o "$RUNNER_TEMP/fsend.exe" .
+          go build -trimpath -o "$RUNNER_TEMP/fsend.exe" ./src
           "$RUNNER_TEMP/fsend.exe" version
           "$RUNNER_TEMP/fsend.exe" --help
 
@@ -64,7 +64,7 @@ jobs:
           if [[ "$REF_TYPE" == tag ]]; then
             tag="$REF_NAME"
           else
-            tag="v$(go run . version | awk '{print $2}')"
+            tag="v$(go run ./src version | awk '{print $2}')"
           fi
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           if gh release view "$tag" >/dev/null 2>&1; then
@@ -93,7 +93,7 @@ jobs:
             [[ "$arch" != arm ]] || label=armv7
             stage=$(mktemp -d)
             exe=fsend; [[ "$os" != windows ]] || exe=fsend.exe
-            GOOS=$os GOARCH=$arch GOARM=7 go build -trimpath -ldflags="-s -w -X main.appVersion=${TAG#v}" -o "$stage/$exe" .
+            GOOS=$os GOARCH=$arch GOARM=7 go build -trimpath -ldflags="-s -w -X main.appVersion=${TAG#v}" -o "$stage/$exe" ./src
             cp README.md DESIGN.txt AUDIT.txt "$stage/"
             archive="$GITHUB_WORKSPACE/dist/fsend_${TAG#v}_${os}_${label}"
             if [[ "$os" == windows ]]; then

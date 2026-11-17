@@ -4,4 +4,4 @@
 
 仅支持常规文件与目录，拒绝软链接、硬链接条目及特殊文件。请双方同时升级到本版本。使用方法见 README.md，原理和限制见 DESIGN.txt，审查记录见 AUDIT.txt。
 
-发布树没有导入 WorkBuddy 的原始测试文件、演示数据、日志、旧构建产物或原始 Git 历史。随源码新增的 security_regression_test.go 用于验证本次修复。
+发布树没有导入 WorkBuddy 的原始测试文件、演示数据、日志、旧构建产物或原始 Git 历史。随源码新增的 src/security_regression_test.go 用于验证本次修复。
