@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-26-intel]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -33,7 +33,7 @@ jobs:
           "$RUNNER_TEMP/fsend.exe" version
           "$RUNNER_TEMP/fsend.exe" --help
       - name: Verify real terminal file selection and transfer
-        if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
+        if: matrix.os == 'ubuntu-latest' || startsWith(matrix.os, 'macos-')
         shell: bash
         run: python3 .github/terminal_smoke.py "$RUNNER_TEMP/fsend.exe"
 
