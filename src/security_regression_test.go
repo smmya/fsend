@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -20,12 +21,12 @@ import (
 )
 
 func TestRejectUnsafeNames(t *testing.T) {
-	for _, name := range []string{"", ".", "..", "../x", "a/../x", "/x", `\x`, `C:\x`, `x:ads`, "x\x1b[2J", "x\n", "NUL.txt", "a/COM1", "x.", "x ", strings.Repeat("a/", 129) + "x"} {
+	for _, name := range []string{"", ".", "..", "../x", "a/../x", "/x", `\x`, `C:\x`, `x:ads`, "x\x1b[2J", "x\n", "NUL.txt", "a/COM1", "COM¹", "LPT².txt", "CON .txt", strings.Repeat("a/", 129) + "x"} {
 		if _, err := safeRelPath(name); err == nil {
 			t.Errorf("accepted unsafe name %q", name)
 		}
 	}
-	for _, name := range []string{"hello world.txt", "目录/文件.txt", "a/b.txt"} {
+	for _, name := range []string{"hello world.txt", "目录/文件.txt", "a/b.txt", "x.", "x ", "dir. /file. "} {
 		if _, err := safeRelPath(name); err != nil {
 			t.Errorf("rejected %q: %v", name, err)
 		}
@@ -175,6 +176,14 @@ func TestTransfersBothDirectionsAndModes(t *testing.T) {
 				if err := os.WriteFile(filepath.Join(src, "zero"), nil, 0o600); err != nil {
 					t.Fatal(err)
 				}
+				if runtime.GOOS != "windows" {
+					if err := os.Mkdir(filepath.Join(src, "trailing. "), 0o700); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(filepath.Join(src, "trailing. ", "file. "), content, 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
 				entry, err := scanEntry(src)
 				if err != nil {
 					t.Fatal(err)
@@ -234,6 +243,12 @@ func TestTransfersBothDirectionsAndModes(t *testing.T) {
 				}
 				if st, err := os.Stat(filepath.Join(dst, entry.Name, "zero")); err != nil || st.Size() != 0 {
 					t.Fatal("empty file lost", err)
+				}
+				if runtime.GOOS != "windows" {
+					got, err := os.ReadFile(filepath.Join(dst, entry.Name, "trailing. ", "file. "))
+					if err != nil || !bytes.Equal(got, content) {
+						t.Fatal("trailing dot/space filename was not preserved", err)
+					}
 				}
 			})
 		}

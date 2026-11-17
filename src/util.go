@@ -223,12 +223,13 @@ func candidateIPs(override string) []string {
 // ---------- 进度条 ----------
 
 type progressBar struct {
-	mu    sync.Mutex
-	total int64
-	done  int64
-	start time.Time
-	tty   bool
-	step  int
+	mu        sync.Mutex
+	total     int64
+	done      int64
+	start     time.Time
+	tty       bool
+	step      int
+	lastWidth int
 }
 
 func newProgressBar(total int64) *progressBar {
@@ -296,7 +297,12 @@ func (p *progressBar) renderLocked(force bool) {
 		bar, pct, mib1(p.done), mib1(p.total), rate/(1024*1024), eta)
 
 	if p.tty {
-		fmt.Fprintf(os.Stderr, "\r%s", line)
+		padding := ""
+		if p.lastWidth > len(line) {
+			padding = strings.Repeat(" ", p.lastWidth-len(line))
+		}
+		fmt.Fprintf(os.Stderr, "\r%s%s", line, padding)
+		p.lastWidth = len(line)
 		return
 	}
 	cur := int(pct / 10)

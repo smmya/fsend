@@ -98,8 +98,13 @@ func acceptPeer(bind string, port int, ipOverride string, waitSec int, peerName 
 
 // runReceive 接收端主流程
 func runReceive(args []string) int {
+	return runReceiveWithInput(args, newInputScanner(os.Stdin))
+}
+
+func runReceiveWithInput(args []string, sc *bufio.Scanner) int {
 	fs := flag.NewFlagSet("receive", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	key := fs.String("key", "", "发送方连接码（仅 -R）；跳过密钥输入")
 	maxBytes := fs.Int64("max-bytes", 100<<30, "最大接收字节数，0 为不限")
 	maxEntries := fs.Int("max-entries", 100000, "最大文件和目录条目数")
 	outDir := fs.String("o", defaultStoreDir(), "存储目录")
@@ -129,6 +134,9 @@ func runReceive(args []string) int {
 			errf("反向模式下本端为拨号方，%s 无效（监听参数属于发送端）", strings.Join(bad, ", "))
 			return 2
 		}
+	} else if explicitlySet(fs, "key") != nil {
+		errf("--key 仅在 receive -R 下使用")
+		return 2
 	}
 
 	receiveMaxBytes, receiveMaxEntries = *maxBytes, *maxEntries
@@ -152,9 +160,11 @@ func runReceive(args []string) int {
 		peer string
 	)
 	if *reverse {
-		sc := bufio.NewScanner(os.Stdin)
-		sc.Buffer(make([]byte, 0, 64*1024), 64*1024)
-		keyStr, kerr := readLine(sc, "输入发送端混合密钥: ")
+		keyStr := strings.TrimSpace(*key)
+		var kerr error
+		if keyStr == "" {
+			keyStr, kerr = readLine(sc, "输入发送端混合密钥: ")
+		}
 		if kerr != nil || keyStr == "" {
 			errf("未提供混合密钥")
 			return 2

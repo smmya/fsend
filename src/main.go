@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/signal"
@@ -8,7 +9,7 @@ import (
 )
 
 // 版本号（version 子命令输出）
-var appVersion = "1.2.0"
+var appVersion = "1.3.0"
 
 func main() {
 	// 顶层 recover：任何 panic 都转为错误输出，绝不把栈信息抛给用户
@@ -35,16 +36,26 @@ func main() {
 }
 
 func run(args []string) int {
+	return runWithInput(args, newInputScanner(os.Stdin))
+}
 
+func runWithInput(args []string, sc *bufio.Scanner) int {
 	if len(args) == 0 {
-		printUsage()
-		return 2
+		selected, err := interactiveArgs(sc)
+		if err != nil {
+			errf("读取选项失败: %v", err)
+			return 2
+		}
+		if len(selected) == 0 {
+			return 0
+		}
+		return runWithInput(selected, sc)
 	}
 	switch args[0] {
 	case "receive":
-		return runReceive(args[1:])
+		return runReceiveWithInput(args[1:], sc)
 	case "send":
-		return runSend(args[1:])
+		return runSendWithInput(args[1:], sc)
 	case "version":
 		fmt.Printf("fsend %s (协议 v1, X25519+AES-256-GCM)\n", appVersion)
 		return 0
@@ -61,13 +72,15 @@ func run(args []string) int {
 // printUsage 用法输出到 stderr（退出码 2 场景）
 func printUsage() {
 	fmt.Fprint(os.Stderr, `用法:
+  fsend                         交互向导（发送/接收、选择连接方向）
   fsend receive [-o 存储目录] [-p 监听端口] [-b 绑定地址] [--ip 对外IP] [--wait 秒]
   fsend send [混合密钥] [--mode tar|serial]
+  fsend send --path 路径 [--path 其他路径] [--mode tar|serial] 混合密钥
   fsend version
 
 反向模式（-R）: 由发送端监听并给出混合密钥，接收端拨号连入。
   fsend send -R [-p 端口] [-b 绑定地址] [--ip 对外IP] [--wait 秒] [--mode tar|serial]
-  fsend receive -R [-o 存储目录]
+  fsend receive -R [-o 存储目录] [--key 混合密钥]
 适用于接收方位于 NAT 后、只有发送方可暴露端口的场景。
 `)
 }

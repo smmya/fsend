@@ -22,6 +22,10 @@ import (
 //
 // 两种方向的协议与数据流向完全一致，只有 TCP 建立方向不同。
 func runSend(args []string) int {
+	return runSendWithInput(args, newInputScanner(os.Stdin))
+}
+
+func runSendWithInput(args []string, sc *bufio.Scanner) int {
 	// --mode 允许出现在位置参数之后：先手工摘出，再交给 FlagSet
 	var modeArg string
 	fargs := make([]string, 0, len(args))
@@ -44,6 +48,8 @@ func runSend(args []string) int {
 
 	fs := flag.NewFlagSet("send", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	var paths pathFlags
+	fs.Var(&paths, "path", "发送文件或目录路径，可重复；跳过路径交互")
 	reverse := fs.Bool("R", false, "反向模式: 本端监听并给出混合密钥（由接收端拨号连入）")
 	fs.BoolVar(reverse, "reverse", false, "反向模式（同 -R）")
 	port := fs.Int("p", 8977, "监听端口（仅反向模式）")
@@ -59,6 +65,9 @@ func runSend(args []string) int {
 		errf("--mode 只能为 tar 或 serial")
 		return 2
 	}
+	if len(paths) > 0 && mode == "" {
+		mode = "tar"
+	}
 	if *waitSec < 0 || *waitSec > 86400 || *port < 0 || *port > 65535 {
 		errf("--wait 必须为 0..86400，端口必须为 0..65535")
 		return 2
@@ -73,8 +82,17 @@ func runSend(args []string) int {
 		return 2
 	}
 
-	sc := bufio.NewScanner(os.Stdin)
-	sc.Buffer(make([]byte, 0, 64*1024), 64*1024)
+	var queue []*queueEntry
+	if len(paths) > 0 {
+		for _, p := range paths {
+			e, err := scanEntry(p)
+			if err != nil {
+				errf("扫描失败 %q: %v", p, err)
+				return 1
+			}
+			queue = append(queue, e)
+		}
+	}
 
 	// 1. 建立连接（正向：拨号；反向：监听等待）
 	var sess *SecureSession
@@ -121,9 +139,12 @@ func runSend(args []string) int {
 	}
 
 	// 2. 交互式队列
-	queue, rc := inputQueue(sc)
-	if rc != 0 {
-		return rc
+	if len(queue) == 0 {
+		var rc int
+		queue, rc = inputQueue(sc)
+		if rc != 0 {
+			return rc
+		}
 	}
 
 	totalBytes := int64(0)
@@ -254,7 +275,7 @@ func inputQueue(sc *bufio.Scanner) ([]*queueEntry, int) {
 	seen := make(map[string]bool)
 
 	for {
-		line, err := readLine(sc, "添加传输任务路径（直接回车结束）: ")
+		line, err := readPathLine(sc, "添加传输任务路径（直接回车结束）: ")
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				if len(queue) == 0 {

@@ -22,7 +22,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ```sh
 curl -fsSL --proto '=https' https://raw.githubusercontent.com/smmya/fsend/main/install.sh -o install-fsend.sh
-FSEND_VERSION=v1.2.0 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
+FSEND_VERSION=v1.3.0 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
 ```
 
 需要 `curl`、`tar` 及 `sha256sum` 或 `shasum`。支持 Linux amd64 / arm64 / armv7，macOS amd64 / arm64。
@@ -41,7 +41,7 @@ FSEND_VERSION=v1.2.0 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
 
 ```powershell
 $script = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/smmya/fsend/main/install.ps1').Content
-& ([scriptblock]::Create($script)) -Version v1.2.0 -InstallDir 'D:\Tools\fsend' -NoPath
+& ([scriptblock]::Create($script)) -Version v1.3.0 -InstallDir 'D:\Tools\fsend' -NoPath
 ```
 
 支持 Windows amd64 / arm64。
@@ -57,7 +57,31 @@ fsend version
 fsend --help
 ```
 
-## 发送文件：接收方先启动
+## 推荐：直接运行交互向导
+
+双方都只需执行：
+
+```sh
+fsend
+```
+
+程序先让你选择 **发送文件 / 接收文件**，再选择连接方式：
+
+- **输入对方给你的连接码**：对方已经给出 `fs://...` 时选这一项。
+- **生成连接码，等待对方连接**：将生成的完整连接码发给对方。
+
+最常用的操作：
+
+1. 接收方选择 **2 接收文件**，连接方式直接回车，选择保存目录（回车使用默认目录），IP/域名也可回车自动检测。
+2. 接收方将打印的连接码发给发送方。
+3. 发送方选择 **1 发送文件**，连接方式直接回车，粘贴连接码。
+4. 发送方逐行输入要发送的文件或目录路径，最后输入空行开始发送。
+
+向导默认使用打包模式，不再额外询问模式；生成连接码后等待 10 分钟。路径带空格可以直接输入，也支持文件管理器拖入的成对引号路径。
+
+如果接收方不能开放端口，让发送方选择“生成连接码”，接收方选择“输入连接码”即可完成反向连接。公网监听方仍需要开放端口并配置端口转发；IP/域名应填对方可访问的地址。
+
+## 命令行兜底：接收方先启动
 
 **1. 接收方启动：**
 
@@ -79,7 +103,7 @@ fs://192.168.1.10:8977#XXXX-XXXX-XXXX-XXXX-XXXX-XXXX
 fsend send --mode tar
 ```
 
-按提示粘贴混合密钥，再逐行输入要发送的文件或目录路径。路径带空格时直接输入路径，不要额外加引号。输入完后再按一次回车开始传输。
+按提示粘贴混合密钥，再逐行输入要发送的文件或目录路径。路径带空格时可直接输入，也支持成对引号。输入完后再按一次回车开始传输。
 
 ```text
 输入接收端混合密钥: 粘贴接收方给出的完整密钥
@@ -90,9 +114,30 @@ fsend send --mode tar
 
 Windows 输入示例：`C:\Users\Alice\Pictures\photo.jpg`。
 
-如果希望每个文件分别确认，使用 `fsend send --mode serial`。省略 `--mode` 时程序会让你选择模式。两个模式均支持空文件和空目录。请双方同时使用 v1.2.0 或更新的兼容版本。
+如果希望每个文件分别确认，使用 `fsend send --mode serial`。直接使用 `send` 子命令且省略 `--mode`、`--path` 时，程序会让你选择模式。两个模式均支持空文件和空目录。请双方同时升级到 v1.3.0 或更新的兼容版本，以获得本次文件名修复。
 
 **3. 等待两端显示完成。** 接收方在 `received` 目录中查看文件；遇到同名文件会自动添加序号，例如 `photo.1.jpg`。已有目录会合并，已有文件不会被覆盖。
+
+### 不需要输入提示的命令
+
+接收方启动监听后，发送方在一条命令中指定路径和实际连接码：
+
+```sh
+fsend send --path ./photo.jpg --path ./Documents 'fs://192.168.1.10:8977#这里替换为实际密钥'
+```
+
+`--path` 可以重复使用，支持文件和目录；路径参数放在连接码前面。使用 `--path` 时默认打包模式，需要逐文件模式时添加 `--mode serial`。
+
+反向连接也可跳过所有提示：
+
+```sh
+# 发送方生成连接码并等待
+fsend send -R --path ./Documents --ip your.example.com --wait 600
+# 接收方使用发送方给出的实际连接码
+fsend receive -R --key 'fs://your.example.com:8977#这里替换为实际密钥' -o ./received
+```
+
+连接码包含访问凭据，放在命令行中可能进入 shell 历史；日常使用推荐交互向导。
 
 ## 公网、指定地址与端口
 
@@ -149,7 +194,8 @@ fsend receive -o ./received --max-bytes 536870912000 --max-entries 200000
 - 混合密钥只发给预期的对方；任何拿到密钥的人都可能连接。每次启动都会生成新密钥，完成一次传输后进程退出。
 - 使用普通用户运行，接收目录使用独立空目录；不需要管理员或 root 权限。
 - 只传输常规文件和目录。软链接、设备文件等会被拒绝。不要在传输过程中修改源文件。
-- 为兼容 Windows，拒绝设备名、控制字符、`..` 路径段，以及包含 `:<>"|?*` 或以点、空格结尾的路径段。
+- 以点或空格结尾的文件及目录名：Linux/macOS 接收时保留原名；Windows 接收时将末尾点和空格分别保存为 `%2E`、`%20`，文件名里的 `%` 保存为 `%25`，避免不同原名相互混淆。例如 `folder. /file.` 保存为 `folder%2E%20/file%2E`。文件内容保持不变，两种模式均支持。
+- 仍拒绝设备名、控制字符、`..` 路径段以及包含 `:<>"|?*` 的路径段。添加目录时会递归检查文件名，尽早提示不支持的名称。
 - 当前版本不恢复时间戳、所有者、ACL、扩展属性及目录权限；普通文件仅保留基本权限位。
 - 连接失败：检查 IP、监听端口、防火墙、端口转发，以及监听方是否已超时退出。
 - 密钥校验失败：核对完整密钥，重新启动监听方生成新密钥。未经认证的探测连接会被拒绝，监听方会继续等待到 `--wait` 超时。

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -15,6 +16,7 @@ type receiveStore struct {
 	committed   bool
 	bytesLeft   int64
 	entriesLeft int
+	nameNotice  bool
 }
 
 func openReceiveStore(dir string) (*receiveStore, error) {
@@ -50,7 +52,7 @@ func (s *receiveStore) remove(name string) {
 
 // O_EXCL atomically reserves a fresh name, including against dangling symlinks.
 func (s *receiveStore) create(name string) (*os.File, string, error) {
-	rel, err := safeRelPath(name)
+	rel, err := s.localName(name)
 	if err != nil {
 		return nil, "", err
 	}
@@ -78,11 +80,24 @@ func (s *receiveStore) create(name string) (*os.File, string, error) {
 }
 
 func (s *receiveStore) mkdir(name string) error {
-	rel, err := safeRelPath(name)
+	rel, err := s.localName(name)
 	if err != nil {
 		return err
 	}
 	return s.root.MkdirAll(rel, 0o700)
+}
+
+func (s *receiveStore) localName(name string) (string, error) {
+	rel, err := receiveRelPath(name, runtime.GOOS)
+	if err != nil {
+		return "", err
+	}
+	original, _ := safeRelPath(name)
+	if rel != original && !s.nameNotice {
+		logf("Windows 文件名已安全转义（例如 %q → %q）；末尾点/空格保存为 %%2E/%%20，%% 保存为 %%25", name, filepath.ToSlash(rel))
+		s.nameNotice = true
+	}
+	return rel, nil
 }
 
 var receiveMaxBytes int64 = 100 << 30

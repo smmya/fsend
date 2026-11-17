@@ -68,6 +68,13 @@ func walkSum(dir string, e *queueEntry) error {
 	}
 	for _, de := range des {
 		full := filepath.Join(dir, de.Name())
+		rel, err := filepath.Rel(filepath.Dir(e.Path), full)
+		if err != nil {
+			return err
+		}
+		if _, err := safeRelPath(filepath.ToSlash(rel)); err != nil {
+			return fmt.Errorf("非法文件名 %q: %w", full, err)
+		}
 		fi, err := os.Lstat(full)
 		if err != nil {
 			return err
@@ -206,12 +213,7 @@ func safeRelPath(name string) (string, error) {
 				return "", errors.New("文件名含控制字符")
 			}
 		}
-		if part != "." && (strings.HasSuffix(part, ".") || strings.HasSuffix(part, " ")) {
-			return "", errors.New("文件名不能以点或空格结尾")
-		}
-		base := strings.ToUpper(strings.SplitN(part, ".", 2)[0])
-		if base == "CON" || base == "PRN" || base == "AUX" || base == "NUL" || base == "CONIN$" || base == "CONOUT$" ||
-			(len(base) == 4 && (strings.HasPrefix(base, "COM") || strings.HasPrefix(base, "LPT")) && base[3] >= '1' && base[3] <= '9') {
+		if isWindowsDeviceName(part) {
 			return "", errors.New("拒绝 Windows 设备名称")
 		}
 	}
