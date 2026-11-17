@@ -22,7 +22,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ```sh
 curl -fsSL --proto '=https' https://raw.githubusercontent.com/smmya/fsend/main/install.sh -o install-fsend.sh
-FSEND_VERSION=v1.4.1 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
+FSEND_VERSION=v1.4.2 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
 ```
 
 需要 `curl`、`tar` 及 `sha256sum` 或 `shasum`。支持 Linux amd64 / arm64 / armv7，macOS amd64 / arm64。
@@ -41,7 +41,7 @@ FSEND_VERSION=v1.4.1 INSTALL_DIR="$HOME/.local/bin" sh install-fsend.sh
 
 ```powershell
 $script = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/smmya/fsend/main/install.ps1').Content
-& ([scriptblock]::Create($script)) -Version v1.4.1 -InstallDir 'D:\Tools\fsend' -NoPath
+& ([scriptblock]::Create($script)) -Version v1.4.2 -InstallDir 'D:\Tools\fsend' -NoPath
 ```
 
 支持 Windows amd64 / arm64。
